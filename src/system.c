@@ -172,27 +172,59 @@ void checkAllAccounts(struct User u)
     success(u);
 }
 
-void updateAccountInfo(struct User u)
+void registerMenu(char name[50], char password[50])
 {
-    // Implement update functionality here
+    struct User newUser;
+    registerUser(&newUser);
 }
 
-void checkAccountDetails(struct User u)
+void registerUser(struct User *newUser)
 {
-    // Implement account detail checking here
-}
+    FILE *pf = fopen("./data/users.txt", "r+");
+    if (!pf)
+    {
+        perror("Unable to open users file");
+        return;
+    }
 
-void makeTransaction(struct User u)
-{
-    // Implement transaction functionality here
-}
+    struct User existingUser;
+    char tempName[50];
+    int maxId = -1;
 
-void removeAccount(struct User u)
-{
-    // Implement account removal here
-}
+    printf("Enter your name: ");
+    scanf("%s", tempName);
 
-void transferOwnership(struct User u)
-{
-    // Implement ownership transfer here
+    int userExists = 0;
+    while (fscanf(pf, "%d %s %s", &existingUser.id, existingUser.name, existingUser.password) != EOF)
+    {
+        if (strcmp(existingUser.name, tempName) == 0)
+        {
+            printf("User with this name already exists. Please choose another name.\n");
+            userExists = 1;
+            break;
+        }
+    }
+
+    if (userExists)
+    {
+        fclose(pf);
+        return;
+    }
+
+    strcpy(newUser->name, tempName);
+    printf("Enter your password: ");
+    scanf("%s", newUser->password);
+
+    newUser->id = 0;
+    while (fscanf(pf, "%d %s %s", &existingUser.id, existingUser.name, existingUser.password) != EOF)
+    {
+        if (existingUser.id >= newUser->id)
+        {
+            newUser->id = existingUser.id + 1;
+        }
+    }
+
+    fprintf(pf, "%d %s %s\n", newUser->id, newUser->name, newUser->password);
+    fclose(pf);
+    printf("Registration successful! You can now log in.\n");
 }
