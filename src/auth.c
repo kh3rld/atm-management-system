@@ -3,6 +3,9 @@
 
 char *USERS = "./data/users.txt";
 
+/// @brief Displays the login menu and prompts the user for their credentials.
+/// @param a
+/// @param pass
 void loginMenu(char a[50], char pass[50])
 {
     struct termios oflags, nflags;
@@ -33,6 +36,9 @@ void loginMenu(char a[50], char pass[50])
     }
 };
 
+/// @brief Password check function.
+/// @param u 
+/// @return 
 const char *getPassword(struct User u)
 {
     FILE *fp;
