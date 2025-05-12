@@ -76,7 +76,7 @@ void initMenu(struct User *u)
             r = 1;
             break;
         case 2:
-            registerUser(u); // Updated this line
+            registerUser(u);
             r = 1;
             break;
         case 3:
@@ -91,7 +91,7 @@ void initMenu(struct User *u)
 int main()
 {
     struct User u;
-    
+
     initMenu(&u);
     mainMenu(u);
     return 0;
