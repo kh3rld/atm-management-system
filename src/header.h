@@ -29,17 +29,24 @@ struct User
     char password[50];
 };
 
-// authentication functions
-void loginMenu(char a[50], char pass[50]);
-void registerMenu(char a[50], char pass[50]);
-const char *getPassword(struct User u);
+int getAccountFromFile(FILE *ptr, char name[50], struct Record *r);
+void saveAccountToFile(FILE *ptr, struct User u, struct Record r);
 
-// system function
+// User management
+void registerUser(struct User *newUser);
+int getNextUserId();
+int getNextRecordId();
+int accountNumberExists(int userId, int accountNbr);
+
+// Account operations
 void createNewAcc(struct User u);
-void mainMenu(struct User u);
 void checkAllAccounts(struct User u);
 void updateAccountInfo(struct User u);
 void checkAccountDetails(struct User u);
 void makeTransaction(struct User u);
 void removeAccount(struct User u);
 void transferOwnership(struct User u);
+
+// Helper functions
+void stayOrReturn(int notGood, void f(struct User u), struct User u);
+void success(struct User u);
