@@ -1,747 +1,933 @@
-#include "header.h"
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
+/**
+ * @file system.c
+ * @brief Core system implementation for the ATM Management System
+ * @author Khalid Hussein
+ * @date 2025
+ * 
+ * This file contains the implementation of core system functions for the
+ * ATM Management System, including account management, transactions,
+ * and data validation.
+ */
 
-#define FIFO_PATH "/tmp/atm_notifications"
+#include "header.h"
+#include <ctype.h>
+#include <time.h>
+#include <sys/stat.h>
+
+#define MAX_RECORDS 100
+#define MAX_USERNAME_SIZE 50
+#define MAX_PASSWORD_SIZE 50
+#define MAX_ID_SIZE 5
+#define MAX_COUNTRY_SIZE 100
+#define MAX_TRANSACTION_TYPE_SIZE 10
+#define MIN_ACCOUNT_BALANCE 0.0
+#define MAX_ACCOUNT_BALANCE 999999999.99
+#define MIN_PHONE_LENGTH 10
+#define MAX_PHONE_LENGTH 15
 
 const char *RECORDS = "./data/records.txt";
 
-/// @brief Reads the account information from a file.
-/// @param ptr 
-/// @param name 
-/// @param r 
-/// @return 
-int getAccountFromFile(FILE *ptr, char name[50], struct Record *r)
-{
-    return fscanf(ptr, "%d %d %s %d %d/%d/%d %s %d %lf %s",
-                  &r->id,
-                  &r->userId,
-                  name,
-                  &r->accountNumber,
-                  &r->depositDate.month,
-                  &r->depositDate.day,
-                  &r->depositDate.year,
-                  r->country,
-                  &r->phone,
-                  &r->amount,
-                  r->accountType) != EOF;
+/**
+ * @brief Safely read an integer from input
+ * 
+ * This function reads an integer from standard input and handles any
+ * input errors or invalid characters.
+ * 
+ * @param value Pointer to store the read integer
+ * @return true if successful, false if input is invalid
+ */
+bool safeReadInt(int *value) {
+    char input[32];
+    if (fgets(input, sizeof(input), stdin) == NULL) {
+        return false;
+    }
+    char *endptr;
+    *value = strtol(input, &endptr, 10);
+    return (*endptr == '\n' || *endptr == '\0');
 }
 
-/// @brief Saves the account information to a file.
-/// @param ptr 
-/// @param u 
-/// @param r
-void saveAccountToFile(FILE *ptr, struct User u, struct Record r)
-{
-    fprintf(ptr, "%d %d %s %d %d/%d/%d %s %d %.2lf %s\n",
-            r.id,
-            u.id,
-            u.name,
-            r.accountNumber,
-            r.depositDate.month,
-            r.depositDate.day,
-            r.depositDate.year,
-            r.country,
-            r.phone,
-            r.amount,
-            r.accountType);
+/**
+ * @brief Safely read a double from input
+ * 
+ * This function reads a double from standard input and handles any
+ * input errors or invalid characters.
+ * 
+ * @param value Pointer to store the read double
+ * @return true if successful, false if input is invalid
+ */
+bool safeReadDouble(double *value) {
+    char input[32];
+    if (fgets(input, sizeof(input), stdin) == NULL) {
+        return false;
+    }
+    char *endptr;
+    *value = strtod(input, &endptr);
+    return (*endptr == '\n' || *endptr == '\0');
 }
 
-/// @brief  Displays a message indicating that the record was not found and prompts the user to try again or return to the main menu.
-/// @param notGood Indicates whether the record was found or not.
-/// @param f The function to call if the user chooses to try again.
-/// @param u The user currently logged in.
+/**
+ * @brief Safely read a string from input
+ * 
+ * This function reads a string from standard input and ensures it
+ * doesn't exceed the maximum length.
+ * 
+ * @param str Buffer to store the read string
+ * @param maxLen Maximum length of the string
+ * @return true if successful, false if input is invalid
+ */
+bool safeReadString(char *str, size_t maxLen) {
+    if (fgets(str, maxLen, stdin) == NULL) {
+        return false;
+    }
+    size_t len = strlen(str);
+    if (len > 0 && str[len-1] == '\n') {
+        str[len-1] = '\0';
+    }
+    return true;
+}
+
+/**
+ * @brief Check if a file exists
+ * 
+ * @param filename Name of the file to check
+ * @return true if file exists, false otherwise
+ */
+bool fileExists(const char *filename) {
+    FILE *file = fopen(filename, "r");
+    if (file) {
+        fclose(file);
+        return true;
+    }
+    return false;
+}
+
+/**
+ * @brief Ensure a directory exists, create if it doesn't
+ * 
+ * @param path Path of the directory to check/create
+ * @return true if directory exists or was created successfully
+ */
+void ensureDirectoryExists(const char *path) {
+    struct stat st = {0};
+    if (stat(path, &st) == -1) {
+        mkdir(path, 0700);
+    }
+}
+
+/**
+ * @brief Initialize the system
+ * 
+ * This function initializes the system by creating necessary directories
+ * and files if they don't exist.
+ * 
+ * @return true if initialization was successful
+ */
+void initSystem() {
+    ensureDirectoryExists("./data");
+    
+    // Create users file if it doesn't exist
+    if (!fileExists("./data/users.txt")) {
+        FILE *fp = fopen("./data/users.txt", "w");
+        if (fp) {
+            fclose(fp);
+        }
+    }
+    
+    // Create records file if it doesn't exist
+    if (!fileExists("./data/records.txt")) {
+        FILE *fp = fopen("./data/records.txt", "w");
+        if (fp) {
+            fclose(fp);
+        }
+    }
+}
+
+/**
+ * @brief Validate a date structure
+ * 
+ * @param date Pointer to the date structure to validate
+ * @return true if date is valid, false otherwise
+ */
+bool isValidDate(int month, int day, int year) {
+    if (year < 1900 || year > 2100) return false;
+    if (month < 1 || month > 12) return false;
+    if (day < 1 || day > 31) return false;
+    
+    // Check for months with 30 days
+    if ((month == 4 || month == 6 || month == 9 || month == 11) && day > 30) return false;
+    
+    // Check for February
+    if (month == 2) {
+        if ((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)) {
+            if (day > 29) return false;
+        } else {
+            if (day > 28) return false;
+        }
+    }
+    
+    return true;
+}
+
+/**
+ * @brief Validate a phone number
+ * 
+ * @param phone Phone number to validate
+ * @return true if phone number is valid, false otherwise
+ */
+bool isValidPhoneNumber(int phone) {
+    char phoneStr[20];
+    sprintf(phoneStr, "%d", phone);
+    int len = strlen(phoneStr);
+    return len >= MIN_PHONE_LENGTH && len <= MAX_PHONE_LENGTH;
+}
+
+/**
+ * @brief Validate an amount
+ * 
+ * @param amount Amount to validate
+ * @return true if amount is valid, false otherwise
+ */
+bool isValidAmount(double amount) {
+    return amount >= MIN_ACCOUNT_BALANCE && amount <= MAX_ACCOUNT_BALANCE;
+}
+
+/**
+ * @brief Validate an account type
+ * 
+ * @param type Account type to validate
+ * @return true if account type is valid, false otherwise
+ */
+bool isValidAccountType(const char *type) {
+    const char *validTypes[] = {"savings", "current", "fixed01", "fixed02", "fixed03"};
+    for (int i = 0; i < 5; i++) {
+        if (strcmp(type, validTypes[i]) == 0) return true;
+    }
+    return false;
+}
+
+/**
+ * @brief Get current date
+ * 
+ * @param date Pointer to the date structure to fill
+ */
+void getCurrentDate(struct Date *date) {
+    time_t t = time(NULL);
+    struct tm tm = *localtime(&t);
+    date->year = tm.tm_year + 1900;
+    date->month = tm.tm_mon + 1;
+    date->day = tm.tm_mday;
+}
+
+/**
+ * @brief Create a backup of the records file
+ * 
+ * @return true if backup was successful, false otherwise
+ */
+bool backupRecordsFile() {
+    if (!fileExists(RECORDS)) {
+        return false;
+    }
+
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    char backupName[256];
+    strftime(backupName, sizeof(backupName), "./data/records_backup_%Y%m%d_%H%M%S.txt", t);
+
+    FILE *source = fopen(RECORDS, "r");
+    if (source == NULL) return false;
+
+    FILE *backup = fopen(backupName, "w");
+    if (backup == NULL) {
+        fclose(source);
+        return false;
+    }
+
+    char buffer[1024];
+    size_t size;
+    while ((size = fread(buffer, 1, sizeof(buffer), source)) > 0) {
+        fwrite(buffer, 1, size, backup);
+    }
+
+    fclose(source);
+    fclose(backup);
+    return true;
+}
+
+/**
+ * @brief Get account information from file
+ * 
+ * This function reads account information from the records file and
+ * validates the data before returning it.
+ * 
+ * @param u User structure containing user information
+ * @param accountNbr Account number to search for
+ * @param record Pointer to store the found record
+ * @return true if account was found and is valid, false otherwise
+ */
+bool getAccountFromFile(struct User u, int accountNbr, struct Record *record)
+{
+    FILE *file = fopen(RECORDS, "r");
+    if (file == NULL) {
+        printf("\n\t\t✖ Error: Could not open records file\n");
+        return false;
+    }
+
+    bool found = false;
+    while (fread(record, sizeof(struct Record), 1, file)) {
+        if (record->accountNbr == accountNbr && strcmp(record->name, u.name) == 0) {
+            found = true;
+            break;
+        }
+    }
+
+    fclose(file);
+    return found;
+}
+
+/**
+ * @brief Save account information to file
+ * 
+ * This function saves account information to the records file after
+ * validating the data.
+ * 
+ * @param record Pointer to the record to save
+ * @return true if save was successful, false otherwise
+ */
+bool saveAccountToFile(struct Record *record)
+{
+    if (!isValidDate(record->deposit.month, record->deposit.day, record->deposit.year) ||
+        !isValidPhoneNumber(record->phone) ||
+        !isValidAmount(record->amount) ||
+        !isValidAccountType(record->accountType)) {
+        return false;
+    }
+
+    FILE *file = fopen(RECORDS, "a");
+    if (file == NULL) {
+        printf("\n\t\t✖ Error: Could not open records file\n");
+        return false;
+    }
+
+    fwrite(record, sizeof(struct Record), 1, file);
+    fclose(file);
+    return true;
+}
+
+void updateUserAccountInFile(FILE *ptr, struct Record r)
+{
+    fprintf(ptr, "%d %d %s %d %d/%d/%d %s %d %.2lf %s\n\n", r.id, r.userId,
+            r.name, r.accountNbr, r.deposit.month, r.deposit.day, r.deposit.year,
+            r.country, r.phone, r.amount, r.accountType);
+}
+
 void stayOrReturn(int notGood, void f(struct User u), struct User u)
 {
     int option;
-    if (notGood == 0)
+    do
     {
-        system("clear");
-        printf("\n✖ Record not found!!\n");
-    invalid:
-        printf("\nEnter 0 to try again, 1 to return to main menu and 2 to exit:");
+        if (notGood == 0)
+        {
+            printf("\n\t\tEnter 0 to try again, 1 to return to main menu and 2 to "
+                   "exit! \n\n");
+        }
+        else
+        {
+            printf("\n\t\tEnter 1 to go to the main menu and 0 to exit! \n\n");
+        }
+
         scanf("%d", &option);
+
         if (option == 0)
+        {
             f(u);
+            break;
+        }
         else if (option == 1)
+        {
             mainMenu(u);
+            break;
+        }
         else if (option == 2)
+        {
             exit(0);
+        }
         else
         {
             printf("Insert a valid operation!\n");
-            goto invalid;
         }
-    }
-    else
-    {
-        printf("\nEnter 1 to go to the main menu and 0 to exit:");
-        scanf("%d", &option);
-    }
-    if (option == 1)
-    {
-        system("clear");
-        mainMenu(u);
-    }
-    else
-    {
-        system("clear");
-        exit(1);
-    }
+    } while (option < 0 || option > 2);
 }
 
-/// @brief Displays a success message and prompts the user to return to the main menu or exit.
-/// @param u The user currently logged in.
 void success(struct User u)
 {
     int option;
-    printf("\n✔ Success!\n\n");
-invalid:
-    printf("Enter 1 to go to the main menu and 0 to exit!\n");
-    scanf("%d", &option);
-    system("clear");
-    if (option == 1)
-    {
-        mainMenu(u);
-    }
-    else if (option == 0)
-    {
-        exit(1);
-    }
-    else
-    {
-        printf("Insert a valid operation!\n");
-        goto invalid;
-    }
-}
 
-/// @brief Creates a new account for the user.
-/// @param u The user currently logged in.
-void createNewAcc(struct User u)
-{
-    struct Record r;
-    struct Record cr;
-    char userName[50];
-    FILE *pf = fopen(RECORDS, "a+");
-    if (!pf)
+    while (1)
     {
-        perror("Error opening records file");
-        return;
-    }
+        printf("\n\t\tEnter 1 to go to the main menu and 0 to exit! \n\n");
+        scanf("%d", &option);
+        system("clear");
 
-noAccount:
-    system("clear");
-    printf("\t\t\t===== New record =====\n");
-
-    printf("\nEnter today's date(mm/dd/yyyy): ");
-    scanf("%d/%d/%d", &r.depositDate.month, &r.depositDate.day, &r.depositDate.year);
-    printf("\nEnter the account number: ");
-    scanf("%d", &r.accountNumber);
-
-    while (getAccountFromFile(pf, userName, &cr))
-    {
-        if (strcmp(userName, u.name) == 0 && cr.accountNumber == r.accountNumber)
+        if (option == 1)
         {
-            printf("✖ This Account already exists for this user\n\n");
-            goto noAccount;
+            mainMenu(u);
+            break;
+        }
+        else if (option == 0)
+        {
+            exit(1);
+        }
+        else
+        {
+            printf("\n\t\tInsert a valid operation!\n");
         }
     }
-    printf("\nEnter the country: ");
-    scanf("%s", r.country);
-    printf("\nEnter the phone number: ");
-    scanf("%d", &r.phone);
-    printf("\nEnter amount to deposit: $");
-    scanf("%lf", &r.amount);
-    printf("\nChoose the type of account:\n\t-> saving\n\t-> current\n\t-> fixed01(for 1 year)\n\t-> fixed02(for 2 years)\n\t-> fixed03(for 3 years)\n\n\tEnter your choice: ");
-    scanf("%s", r.accountType);
-
-    saveAccountToFile(pf, u, r);
-    fclose(pf);
-    success(u);
 }
 
-/// @brief Displays all accounts associated with a specific user.
-/// @param u The user currently logged in.
-void checkAllAccounts(struct User u)
+int getUserId(const char *username)
 {
-    char userName[100];
-    struct Record r;
-    FILE *pf = fopen(RECORDS, "r");
-    if (!pf)
+    FILE *fp = fopen("./data/users.txt", "r");
+    if (!fp)
     {
-        perror("Error opening records file");
-        return;
+        perror("\n\t\tError opening file");
+        exit(1);
     }
 
-    system("clear");
-    printf("\t\t====== All accounts from user, %s =====\n\n", u.name);
-    while (getAccountFromFile(pf, userName, &r))
+    char id[MAX_ID_SIZE], name[MAX_USERNAME_SIZE], pass[MAX_PASSWORD_SIZE];
+    while (fscanf(fp, "%s %s %s", id, name, pass) != EOF)
+    {
+        if (strcmp(name, username) == 0)
+        {
+            fclose(fp);
+            return atoi(id);
+        }
+    }
+
+    fclose(fp);
+    return -1;
+}
+
+int doesUserHaveAccounts(struct User u)
+{
+    struct Record r;
+    FILE *pf = fopen(RECORDS, "r");
+    if (pf == NULL)
+    {
+        perror("\n\t\tFailed to open file");
+        return 0;
+    }
+    char userName[MAX_USERNAME_SIZE];
+    while (getAccountFromFile(u, r.accountNbr, &r))
     {
         if (strcmp(userName, u.name) == 0)
         {
-            printf("_____________________\n");
-            printf("\nAccount number: %d\nDeposit Date: %d/%d/%d\nCountry: %s\nPhone number: %d\nAmount deposited: $%.2f\nType Of Account: %s\n",
-                   r.accountNumber,
-                   r.depositDate.day,
-                   r.depositDate.month,
-                   r.depositDate.year,
-                   r.country,
-                   r.phone,
-                   r.amount,
-                   r.accountType);
+            fclose(pf);
+            return 1;
         }
     }
     fclose(pf);
-    success(u);
+    return 0;
 }
 
-/// @brief Registers a new user.
-/// @param name 
-/// @param password
-void registerMenu(char name[50], char password[50])
+/**
+ * @brief Create a new account
+ * 
+ * This function handles the creation of a new account, including
+ * input validation and file operations.
+ * 
+ * @param u User structure containing user information
+ */
+void createNewAccount(struct User u)
 {
-    struct User newUser;
-    registerUser(&newUser);
-}
+    struct Record record;
+    record.id = 0;
+    strncpy(record.name, u.name, sizeof(record.name) - 1);
+    record.name[sizeof(record.name) - 1] = '\0';
 
-/// @brief Registers a new user.
-/// @param newUser The user to be registered.
-/// @param name The name of the user.
-/// @param password The password of the user.
-void registerUser(struct User *newUser)
-{
-    FILE *pf = fopen("./data/users.txt", "r+");
-    if (!pf)
-    {
-        perror("Unable to open users file");
+    printf("\n\t\tEnter the account number: ");
+    if (!safeReadInt(&record.accountNbr) || record.accountNbr <= 0) {
+        printf("\n\t\t✖ Invalid account number\n");
         return;
     }
 
-    struct User existingUser;
-    char tempName[50];
-    int maxId = -1;
+    printf("\n\t\tEnter the phone number: ");
+    if (!safeReadString(record.phone, sizeof(record.phone)) || 
+        !isValidPhoneNumber(record.phone)) {
+        printf("\n\t\t✖ Invalid phone number\n");
+        return;
+    }
 
-    printf("Enter your name: ");
-    scanf("%s", tempName);
+    printf("\n\t\tEnter amount to deposit: $");
+    if (!safeReadDouble(&record.amount) || !isValidAmount(record.amount)) {
+        printf("\n\t\t✖ Invalid amount\n");
+        return;
+    }
 
-    int userExists = 0;
-    while (fscanf(pf, "%d %s %s", &existingUser.id, existingUser.name, existingUser.password) != EOF)
-    {
-        if (strcmp(existingUser.name, tempName) == 0)
-        {
-            printf("User with this name already exists. Please choose another name.\n");
-            userExists = 1;
+    printf("\n\t\tChoose the type of account:\n");
+    printf("\t\t[1] savings\n");
+    printf("\t\t[2] fixed01(for 1 year)\n");
+    printf("\t\t[3] fixed02(for 2 years)\n");
+    printf("\t\t[4] fixed03(for 3 years)\n");
+
+    int choice;
+    if (!safeReadInt(&choice) || choice < 1 || choice > 4) {
+        printf("\n\t\t✖ Invalid choice\n");
+        return;
+    }
+
+    switch (choice) {
+        case 1:
+            strncpy(record.accountType, "savings", sizeof(record.accountType) - 1);
+            break;
+        case 2:
+            strncpy(record.accountType, "fixed01", sizeof(record.accountType) - 1);
+            break;
+        case 3:
+            strncpy(record.accountType, "fixed02", sizeof(record.accountType) - 1);
+            break;
+        case 4:
+            strncpy(record.accountType, "fixed03", sizeof(record.accountType) - 1);
+            break;
+    }
+    record.accountType[sizeof(record.accountType) - 1] = '\0';
+
+    getCurrentDate(&record.deposit);
+    record.withdrawal = record.deposit;
+
+    if (!backupRecordsFile()) {
+        printf("\n\t\t✖ Error: Could not create backup before saving\n");
+        return;
+    }
+
+    if (!saveAccountToFile(&record)) {
+        printf("\n\t\t✖ Error: Could not save account information\n");
+        return;
+    }
+
+    printf("\n\t\t✓ Account created successfully!\n");
+}
+
+/**
+ * @brief Check all accounts for a user
+ * 
+ * This function displays all accounts associated with a user.
+ * 
+ * @param u User structure containing user information
+ */
+void checkAllAccounts(struct User u)
+{
+    FILE *file = fopen(RECORDS, "r");
+    if (file == NULL) {
+        printf("\n\t\t✖ Error: Could not open records file\n");
+        return;
+    }
+
+    struct Record record;
+    bool found = false;
+    printf("\n\t\t====== All accounts from user, %s =======\n\n", u.name);
+    
+    while (fread(&record, sizeof(struct Record), 1, file)) {
+        if (strcmp(record.name, u.name) == 0) {
+            printf("\t\t_____________________\n");
+            printf("\t\tAccount number:%d\n", record.accountNbr);
+            printf("\t\tCountry:%s\n", record.country);
+            printf("\t\tPhone number:%s\n", record.phone);
+            printf("\t\tAmount deposited: $%.2f\n", record.amount);
+            printf("\t\tType Of Account:%s\n", record.accountType);
+            printf("\t\tCreated At:%d/%d/%d\n\n", 
+                   record.deposit.month, record.deposit.day, record.deposit.year);
+            found = true;
+        }
+    }
+
+    if (!found) {
+        printf("\n\t\t✖ No accounts found for user %s\n", u.name);
+    }
+
+    fclose(file);
+}
+
+/**
+ * @brief Update account information
+ * 
+ * This function allows updating account information such as phone number
+ * and country.
+ * 
+ * @param u User structure containing user information
+ */
+void updateAccountInformation(struct User u)
+{
+    if (!backupRecordsFile()) {
+        printf("\n\t\t✖ Error: Could not create backup before updating\n");
+        return;
+    }
+
+    int accountNbr;
+    printf("\n\t\tEnter the account number: ");
+    if (!safeReadInt(&accountNbr) || accountNbr <= 0) {
+        printf("\n\t\t✖ Invalid account number\n");
+        return;
+    }
+
+    FILE *file = fopen(RECORDS, "r+");
+    if (file == NULL) {
+        printf("\n\t\t✖ Error: Could not open records file\n");
+        return;
+    }
+
+    struct Record record;
+    bool found = false;
+    long int position = 0;
+
+    while (fread(&record, sizeof(struct Record), 1, file)) {
+        if (record.accountNbr == accountNbr && strcmp(record.name, u.name) == 0) {
+            found = true;
             break;
         }
+        position = ftell(file);
     }
 
-    if (userExists)
-    {
-        fclose(pf);
+    if (!found) {
+        printf("\n\t\t✖ Account not found\n");
+        fclose(file);
         return;
     }
 
-    strcpy(newUser->name, tempName);
-    printf("Enter your password: ");
-    scanf("%s", newUser->password);
-
-    newUser->id = 0;
-    while (fscanf(pf, "%d %s %s", &existingUser.id, existingUser.name, existingUser.password) != EOF)
-    {
-        if (existingUser.id >= newUser->id)
-        {
-            newUser->id = existingUser.id + 1;
-        }
+    if (strstr(record.accountType, "fixed") != NULL) {
+        printf("\n\t\t✖ Cannot modify fixed-term accounts\n");
+        fclose(file);
+        return;
     }
 
-    fprintf(pf, "%d %s %s\n", newUser->id, newUser->name, newUser->password);
-    fclose(pf);
-    printf("Registration successful! You can now log in.\n");
+    printf("\n\t\tEnter new phone number: ");
+    if (!safeReadString(record.phone, sizeof(record.phone)) || 
+        !isValidPhoneNumber(record.phone)) {
+        printf("\n\t\t✖ Invalid phone number\n");
+        fclose(file);
+        return;
+    }
+
+    printf("\n\t\tEnter new country: ");
+    if (!safeReadString(record.country, sizeof(record.country))) {
+        printf("\n\t\t✖ Invalid country\n");
+        fclose(file);
+        return;
+    }
+
+    fseek(file, position, SEEK_SET);
+    fwrite(&record, sizeof(struct Record), 1, file);
+    fclose(file);
+
+    printf("\n\t\t✓ Account information updated successfully!\n");
 }
 
-/// @brief Updates the account information for a specific user.
-/// @param u The user currently logged in.
-/// @param r The record of the account to be updated.
-/// @param userName The name of the user associated with the account.
-/// @param notGood Indicates whether the account was found or not.
-/// @param pf The file pointer to the records file.
-/// @param tempFile The file pointer to the temporary file.
-/// @param cr The record of the account to be updated.
-void updateAccountInfo(struct User u)
-{
-    struct Record r;
-    struct Record cr;
-    char userName[50];
-    FILE *pf = fopen(RECORDS, "r+");
-    if (!pf)
-    {
-        perror("Error opening records file");
-        return;
-    }
-    system("clear");
-    printf("\t\t\t===== Update account info =====\n");
-    printf("\nEnter the account number: ");
-    scanf("%d", &r.accountNumber);
-    int notGood = 0;
-    while (getAccountFromFile(pf, userName, &cr))
-    {
-        if (strcmp(userName, u.name) == 0 && cr.accountNumber == r.accountNumber)
-        {
-            notGood = 1;
-            break;
-        }
-    }
-    if (notGood == 0)
-    {
-        stayOrReturn(notGood, updateAccountInfo, u);
-        fclose(pf);
-        return;
-    }
-    printf("\nEnter the new country: ");
-    scanf("%s", r.country);
-    printf("\nEnter the new phone number: ");
-    scanf("%d", &r.phone);
-    printf("\nEnter the new amount to deposit: $");
-    scanf("%lf", &r.amount); 
-    printf("\nChoose the new type of account:\n\t-> saving\n\t-> current\n\t-> fixed01(for 1 year)\n\t-> fixed02(for 2 years)\n\t-> fixed03(for 3 years)\n\n\tEnter your choice: ");
-    scanf("%s", r.accountType);
-    fseek(pf, 0, SEEK_SET);
-    FILE *tempFile = fopen("./data/temp.txt", "w");
-    if (!tempFile)
-    {
-        perror("Error opening temporary file");
-        fclose(pf);
-        return;
-    }
-    while (getAccountFromFile(pf, userName, &cr))
-    {
-        if (strcmp(userName, u.name) == 0 && cr.accountNumber == r.accountNumber)
-        {
-            saveAccountToFile(tempFile, u, r);
-        }
-        else
-        {
-            saveAccountToFile(tempFile, u, cr);
-        }
-    }
-    fclose(pf);
-    fclose(tempFile);
-    remove(RECORDS);
-    rename("./data/temp.txt", RECORDS);
-    success(u);
-    fclose(pf);
-    fclose(tempFile);
-}
-/// @brief Displays the details of a specific account.
-/// @param u The user currently logged in.
-/// @param r The record of the account to be displayed.
-/// @param userName The name of the user associated with the account.
+/**
+ * @brief Check account details
+ * 
+ * This function displays detailed information about a specific account.
+ * 
+ * @param u User structure containing user information
+ */
 void checkAccountDetails(struct User u)
 {
-    struct Record r;
-    char userName[50];
-    FILE *pf = fopen(RECORDS, "r");
-    if (!pf)
-    {
-        perror("Error opening records file");
+    int accountNbr;
+    printf("\n\t\tEnter the account number: ");
+    if (!safeReadInt(&accountNbr) || accountNbr <= 0) {
+        printf("\n\t\t✖ Invalid account number\n");
         return;
     }
-    system("clear");
-    printf("\t\t\t===== Check account details =====\n");
-    printf("\nEnter the account number: ");
-    scanf("%d", &r.accountNumber);
-    int notGood = 0;
-    while (getAccountFromFile(pf, userName, &r))
-    {
-        if (strcmp(userName, u.name) == 0 && r.accountNumber == r.accountNumber)
-        {
-            notGood = 1;
-            break;
-        }
-    }
-    if (notGood == 0)
-    {
-        stayOrReturn(notGood, checkAccountDetails, u);
-        fclose(pf);
+
+    struct Record record;
+    if (!getAccountFromFile(u, accountNbr, &record)) {
+        printf("\n\t\t✖ Account not found\n");
         return;
     }
-    printf("\nAccount number: %d\nDeposit Date: %d/%d/%d\nCountry: %s\nPhone number: %d\nAmount deposited: $%.2f\nType Of Account: %s\n",
-           r.accountNumber,
-           r.depositDate.day,
-           r.depositDate.month,
-           r.depositDate.year,
-           r.country,
-           r.phone,
-           r.amount,
-           r.accountType);
 
-    // Calculate and display interest for savings and fixed accounts
-    if (strcmp(r.accountType, "saving") == 0)
-    {
-        double interest = r.amount * 0.07;
-        printf("Interest (7%% annual): $%.2f\n", interest);
-    }
-    else if (strcmp(r.accountType, "fixed01") == 0)
-    {
-        double interest = r.amount * 0.04;
-        printf("Interest (4%% annual): $%.2f\n", interest);
-    }
-    else if (strcmp(r.accountType, "fixed02") == 0)
-    {
-        double interest = r.amount * 0.05;
-        printf("Interest (5%% annual): $%.2f\n", interest);
-    }
-    else if (strcmp(r.accountType, "fixed03") == 0)
-    {
-        double interest = r.amount * 0.08;
-        printf("Interest (8%% annual): $%.2f\n", interest);
-    }
-    else if (strcmp(r.accountType, "current") == 0)
-    {
-        printf("No interest is earned on current accounts.\n");
-    }
-    else
-    {
-        printf("Unknown account type.\n");
-    }
-    
-    // Calculate monthly interest based on account type
-    double monthlyInterest = 0.0;
-    if (strcmp(r.accountType, "saving") == 0) {
-        monthlyInterest = (r.amount * 0.07) / 12;
-        printf("\nYou will get $%.2f as interest on day %d of every month\n", 
-               monthlyInterest, r.depositDate.day);
-    }
-    else if (strcmp(r.accountType, "fixed01") == 0) {
-        monthlyInterest = (r.amount * 0.04) / 12;
-        printf("\nYou will get $%.2f as interest after 1 year on %d/%d/%d\n",
-               monthlyInterest * 12, r.depositDate.day, r.depositDate.month, r.depositDate.year + 1);
-    }
-    else if (strcmp(r.accountType, "fixed02") == 0) {
-        monthlyInterest = (r.amount * 0.05) / 12;
-        printf("\nYou will get $%.2f as interest after 2 years on %d/%d/%d\n",
-               monthlyInterest * 24, r.depositDate.day, r.depositDate.month, r.depositDate.year + 2);
-    }
-    else if (strcmp(r.accountType, "fixed03") == 0) {
-        monthlyInterest = (r.amount * 0.08) / 12;
-        printf("\nYou will get $%.2f as interest after 3 years on %d/%d/%d\n",
-               monthlyInterest * 36, r.depositDate.day, r.depositDate.month, r.depositDate.year + 3);
-    }
-    else if (strcmp(r.accountType, "current") == 0) {
-        printf("\nYou will not get interests because the account is of type current\n");
-    }
-
-    fclose(pf);
+    printf("\n\t\t====== Account Details ======\n");
+    printf("\t\tAccount number: %d\n", record.accountNbr);
+    printf("\t\tCountry: %s\n", record.country);
+    printf("\t\tPhone number: %s\n", record.phone);
+    printf("\t\tAmount deposited: $%.2f\n", record.amount);
+    printf("\t\tType of account: %s\n", record.accountType);
+    printf("\t\tCreated at: %d/%d/%d\n", 
+           record.deposit.month, record.deposit.day, record.deposit.year);
 }
 
-// /// @brief Displays the main menu for the ATM management system.
-// /// @param u The user currently logged in.
-// void mainMenu(struct User u)
-// {
-//     int choice;
-//     system("clear");
-//     printf("\t\t\t===== ATM Management System =====\n");
-//     printf("\nWelcome, %s!\n", u.name);
-//     printf("\n1. Create New Account");
-//     printf("\n2. Check All Accounts");
-//     printf("\n3. Check Account Details");
-//     printf("\n4. Update Account Info");
-//     printf("\n5. Make a Transaction");
-//     printf("\n6. Remove Account");
-//     printf("\n7. Transfer Ownership");
-//     printf("\n8. Exit");
-//     printf("\n\nEnter your choice: ");
-//     scanf("%d", &choice);
-
-//     switch (choice)
-//     {
-//     case 1:
-//         createNewAcc(u);
-//         break;
-//     case 2:
-//         checkAllAccounts(u);
-//         break;
-//     case 3:
-//         checkAccountDetails(u);
-//         break;
-//     case 4:
-//         updateAccountInfo(u);
-//         break;
-//     case 5:
-//         makeTransaction(u);
-//         break;
-//     case 6:
-//         removeAccount(u);
-//         break;
-//     case 7:
-//         transferOwnership(u);
-//         break;
-//     case 8:
-//         system("clear");
-//         printf("Thank you for using the ATM Management System. Goodbye!\n");
-//         exit(0);
-//     default:
-//         printf("Invalid choice! Please try again.\n");
-//         mainMenu(u);
-//     }
-// }
-
-/// @brief Displays the login menu and prompts the user for their credentials.
-/// @param u 
+/**
+ * @brief Make a transaction
+ * 
+ * This function handles deposits and withdrawals for an account.
+ * 
+ * @param u User structure containing user information
+ */
 void makeTransaction(struct User u)
 {
-    struct Record r;
-    struct Record cr;
-    char userName[50];
-    FILE *pf = fopen(RECORDS, "r+");
-    if (!pf)
-    {
-        perror("Error opening records file");
+    if (!backupRecordsFile()) {
+        printf("\n\t\t✖ Error: Could not create backup before transaction\n");
         return;
     }
-    system("clear");
-    printf("\t\t\t===== Make a transaction =====\n");
-    printf("\nEnter the account number: ");
-    scanf("%d", &r.accountNumber);
-    int notGood = 0;
-    while (getAccountFromFile(pf, userName, &cr))
-    {
-        if (strcmp(userName, u.name) == 0 && cr.accountNumber == r.accountNumber)
-        {
-            notGood = 1;
+
+    int accountNbr;
+    printf("\n\t\tEnter the account number: ");
+    if (!safeReadInt(&accountNbr) || accountNbr <= 0) {
+        printf("\n\t\t✖ Invalid account number\n");
+        return;
+    }
+
+    struct Record record;
+    if (!getAccountFromFile(u, accountNbr, &record)) {
+        printf("\n\t\t✖ Account not found\n");
+        return;
+    }
+
+    if (strstr(record.accountType, "fixed") != NULL) {
+        printf("\n\t\t✖ Cannot make transactions on fixed-term accounts\n");
+        return;
+    }
+
+    printf("\n\t\tDo you want to\n");
+    printf("\t\t[1] Deposit\n");
+    printf("\t\t[2] Withdraw\n");
+
+    int choice;
+    if (!safeReadInt(&choice) || (choice != 1 && choice != 2)) {
+        printf("\n\t\t✖ Invalid choice\n");
+        return;
+    }
+
+    double amount;
+    printf("\n\t\tEnter the amount: $");
+    if (!safeReadDouble(&amount) || amount <= 0) {
+        printf("\n\t\t✖ Invalid amount\n");
+        return;
+    }
+
+    if (choice == 1) {
+        record.amount += amount;
+    } else {
+        if (amount > record.amount) {
+            printf("\n\t\t✖ Insufficient funds\n");
+            return;
+        }
+        record.amount -= amount;
+    }
+
+    FILE *file = fopen(RECORDS, "r+");
+    if (file == NULL) {
+        printf("\n\t\t✖ Error: Could not open records file\n");
+        return;
+    }
+
+    struct Record temp;
+    while (fread(&temp, sizeof(struct Record), 1, file)) {
+        if (temp.accountNbr == accountNbr && strcmp(temp.name, u.name) == 0) {
+            fseek(file, -sizeof(struct Record), SEEK_CUR);
+            fwrite(&record, sizeof(struct Record), 1, file);
             break;
         }
     }
-    if (notGood == 0)
-    {
-        stayOrReturn(notGood, makeTransaction, u);
-        fclose(pf);
-        return;
-    }
 
-    // Add restriction for fixed accounts
-    if (strncmp(cr.accountType, "fixed", 5) == 0)
-    {
-        printf("\n✖ Transactions are not allowed for fixed deposit accounts!\n");
-        fclose(pf);
-        stayOrReturn(0, makeTransaction, u);
-        return;
-    }
-
-    printf("\nEnter the amount to withdraw: $");
-    scanf("%lf", &r.amount);
-    printf("\nEnter today's date(mm/dd/yyyy): ");
-    scanf("%d/%d/%d", &r.withdrawDate.month, &r.withdrawDate.day, &r.withdrawDate.year);
-    fseek(pf, 0, SEEK_SET);
-    FILE *tempFile = fopen("./data/temp.txt", "w");
-    if (!tempFile)
-    {
-        perror("Error opening temporary file");
-        fclose(pf);
-        return;
-    }
-    while (getAccountFromFile(pf, userName, &cr))
-    {
-        if (strcmp(userName, u.name) == 0 && cr.accountNumber == r.accountNumber)
-        {
-            cr.amount -= r.amount;
-            saveAccountToFile(tempFile, u, cr);
-        }
-        else
-        {
-            saveAccountToFile(tempFile, u, cr);
-        }
-    }
-    fclose(pf);
-    fclose(tempFile);
-    remove(RECORDS);
-    rename("./data/temp.txt", RECORDS);
-    success(u);
-    fclose(pf);
-    fclose(tempFile);
+    fclose(file);
+    printf("\n\t\t✓ Transaction completed successfully!\n");
 }
 
-/// @brief Displays the login menu and prompts the user for their credentials.
-/// @param u 
+/**
+ * @brief Remove an account
+ * 
+ * This function handles the removal of an account after validation
+ * and confirmation.
+ * 
+ * @param u User structure containing user information
+ */
 void removeAccount(struct User u)
 {
-    struct Record r;
-    struct Record cr;
-    char userName[50];
-    FILE *pf = fopen(RECORDS, "r+");
-    if (!pf)
-    {
-        perror("Error opening records file");
+    if (!backupRecordsFile()) {
+        printf("\n\t\t✖ Error: Could not create backup before removal\n");
         return;
     }
-    system("clear");
-    printf("\t\t\t===== Remove account =====\n");
-    printf("\nEnter the account number: ");
-    scanf("%d", &r.accountNumber);
-    int notGood = 0;
-    while (getAccountFromFile(pf, userName, &cr))
-    {
-        if (strcmp(userName, u.name) == 0 && cr.accountNumber == r.accountNumber)
-        {
-            notGood = 1;
-            break;
+
+    int accountNbr;
+    printf("\n\t\tEnter the account number: ");
+    if (!safeReadInt(&accountNbr) || accountNbr <= 0) {
+        printf("\n\t\t✖ Invalid account number\n");
+        return;
+    }
+
+    struct Record record;
+    if (!getAccountFromFile(u, accountNbr, &record)) {
+        printf("\n\t\t✖ Account not found\n");
+        return;
+    }
+
+    if (strstr(record.accountType, "fixed") != NULL) {
+        printf("\n\t\t✖ Cannot remove fixed-term accounts\n");
+        return;
+    }
+
+    printf("\n\t\tAre you sure you want to remove this account? (y/n): ");
+    char confirm;
+    if (!safeReadString(&confirm, 2) || (confirm != 'y' && confirm != 'Y')) {
+        printf("\n\t\tAccount removal cancelled\n");
+        return;
+    }
+
+    FILE *file = fopen(RECORDS, "r");
+    if (file == NULL) {
+        printf("\n\t\t✖ Error: Could not open records file\n");
+        return;
+    }
+
+    FILE *temp = fopen("data/temp.txt", "w");
+    if (temp == NULL) {
+        printf("\n\t\t✖ Error: Could not create temporary file\n");
+        fclose(file);
+        return;
+    }
+
+    struct Record tempRecord;
+    while (fread(&tempRecord, sizeof(struct Record), 1, file)) {
+        if (!(tempRecord.accountNbr == accountNbr && strcmp(tempRecord.name, u.name) == 0)) {
+            fwrite(&tempRecord, sizeof(struct Record), 1, temp);
         }
     }
-    if (notGood == 0)
-    {
-        stayOrReturn(notGood, removeAccount, u);
-        fclose(pf);
-        return;
-    }
-    fseek(pf, 0, SEEK_SET);
-    FILE *tempFile = fopen("./data/temp.txt", "w");
-    if (!tempFile)
-    {
-        perror("Error opening temporary file");
-        fclose(pf);
-        return;
-    }
-    while (getAccountFromFile(pf, userName, &cr))
-    {
-        if (strcmp(userName, u.name) != 0 || cr.accountNumber != r.accountNumber)
-        {
-            saveAccountToFile(tempFile, u, cr);
-        }
-    }
-    fclose(pf);
-    fclose(tempFile);
+
+    fclose(file);
+    fclose(temp);
+
     remove(RECORDS);
-    rename("./data/temp.txt", RECORDS);
-    success(u);
-    fclose(pf);
-    fclose(tempFile);
+    rename("data/temp.txt", RECORDS);
+
+    printf("\n\t\t✓ Account removed successfully!\n");
 }
 
-/// @brief Transfers ownership of an account to a new user.
-/// @param u The user currently logged in.
-/// @param r The record of the account to be transferred.
-/// @param userName The name of the user associated with the account.
-/// @param notGood Indicates whether the account was found or not.
-/// @param pf The file pointer to the records file.
-/// @param tempFile The file pointer to the temporary file.
+/**
+ * @brief Transfer account ownership
+ * 
+ * This function handles the transfer of account ownership to another user.
+ * 
+ * @param u User structure containing user information
+ */
 void transferOwnership(struct User u)
 {
-    struct Record r;
-    struct Record cr;
-    char userName[50];
-    FILE *pf = fopen(RECORDS, "r+");
-    if (!pf)
-    {
-        perror("Error opening records file");
+    if (!backupRecordsFile()) {
+        printf("\n\t\t✖ Error: Could not create backup before transfer\n");
         return;
     }
-    system("clear");
-    printf("\t\t\t===== Transfer ownership =====\n");
-    printf("\nEnter the account number: ");
-    scanf("%d", &r.accountNumber);
-    int notGood = 0;
-    while (getAccountFromFile(pf, userName, &cr))
-    {
-        if (strcmp(userName, u.name) == 0 && cr.accountNumber == r.accountNumber)
-        {
-            notGood = 1;
+
+    int accountNbr;
+    printf("\n\t\tEnter the account number: ");
+    if (!safeReadInt(&accountNbr) || accountNbr <= 0) {
+        printf("\n\t\t✖ Invalid account number\n");
+        return;
+    }
+
+    struct Record record;
+    if (!getAccountFromFile(u, accountNbr, &record)) {
+        printf("\n\t\t✖ Account not found\n");
+        return;
+    }
+
+    if (strstr(record.accountType, "fixed") != NULL) {
+        printf("\n\t\t✖ Cannot transfer fixed-term accounts\n");
+        return;
+    }
+
+    char newOwner[50];
+    printf("\n\t\tEnter the new owner's username: ");
+    if (!safeReadString(newOwner, sizeof(newOwner))) {
+        printf("\n\t\t✖ Invalid username\n");
+        return;
+    }
+
+    if (strcmp(newOwner, u.name) == 0) {
+        printf("\n\t\t✖ Cannot transfer to yourself\n");
+        return;
+    }
+
+    FILE *users = fopen("data/users.txt", "r");
+    if (users == NULL) {
+        printf("\n\t\t✖ Error: Could not open users file\n");
+        return;
+    }
+
+    struct User tempUser;
+    bool userExists = false;
+    while (fread(&tempUser, sizeof(struct User), 1, users)) {
+        if (strcmp(tempUser.name, newOwner) == 0) {
+            userExists = true;
             break;
         }
     }
-    if (notGood == 0)
-    {
-        stayOrReturn(notGood, transferOwnership, u);
-        fclose(pf);
-        return;
-    }
-    
-    // Verify new owner exists
-    FILE *userFile = fopen("./data/users.txt", "r");
-    if (!userFile) {
-        perror("Error opening users file");
-        fclose(pf);
+    fclose(users);
+
+    if (!userExists) {
+        printf("\n\t\t✖ User does not exist\n");
         return;
     }
 
-    struct User newOwner;
-    int userFound = 0;
-    char newOwnerName[50];
-    
-    printf("\nEnter the new owner name: ");
-    scanf("%s", newOwnerName);
-    
-    while (fscanf(userFile, "%d %s %s", &newOwner.id, newOwner.name, newOwner.password) != EOF) {
-        if (strcmp(newOwner.name, newOwnerName) == 0) {
-            userFound = 1;
+    FILE *file = fopen(RECORDS, "r+");
+    if (file == NULL) {
+        printf("\n\t\t✖ Error: Could not open records file\n");
+        return;
+    }
+
+    struct Record temp;
+    while (fread(&temp, sizeof(struct Record), 1, file)) {
+        if (temp.accountNbr == accountNbr && strcmp(temp.name, u.name) == 0) {
+            strncpy(temp.name, newOwner, sizeof(temp.name) - 1);
+            temp.name[sizeof(temp.name) - 1] = '\0';
+            fseek(file, -sizeof(struct Record), SEEK_CUR);
+            fwrite(&temp, sizeof(struct Record), 1, file);
             break;
         }
     }
-    fclose(userFile);
 
-    if (!userFound) {
-        printf("\n✖ New owner not found!\n");
-        stayOrReturn(0, transferOwnership, u);
-        fclose(pf);
-        return;
-    }
-
-    // Send notification through pipe
-    int notification_fd = open(FIFO_PATH, O_WRONLY | O_NONBLOCK);
-    if (notification_fd >= 0) {
-        char notification[256];
-        snprintf(notification, sizeof(notification), 
-                "User %s transferred account %d to you\n", 
-                u.name, r.accountNumber);
-        write(notification_fd, notification, strlen(notification));
-        close(notification_fd);
-    }
-
-    // Update ownership in records
-    fseek(pf, 0, SEEK_SET);
-    FILE *tempFile = fopen("./data/temp.txt", "w");
-    if (!tempFile)
-    {
-        perror("Error opening temporary file");
-        fclose(pf);
-        return;
-    }
-
-    while (getAccountFromFile(pf, userName, &cr))
-    {
-        if (strcmp(userName, u.name) == 0 && cr.accountNumber == r.accountNumber)
-        {
-            cr.userId = newOwner.id;
-            saveAccountToFile(tempFile, newOwner, cr);
-        }
-        else
-        {
-            saveAccountToFile(tempFile, u, cr);
-        }
-    }
-
-    fclose(pf);
-    fclose(tempFile);
-    remove(RECORDS);
-    rename("./data/temp.txt", RECORDS);
-    success(u);
+    fclose(file);
+    printf("\n\t\t✓ Ownership transferred successfully!\n");
 }
 
-// Add this function to handle notifications
-void setupNotificationSystem() {
-    mkfifo(FIFO_PATH, 0666);
+/**
+ * @brief Handle failed login attempts
+ * 
+ * This function handles failed login attempts and implements
+ * security measures.
+ * 
+ * @param u Pointer to the user structure
+ */
+void handleFailedLogin(struct User *u)
+{
+    static int attempts = 0;
+    attempts++;
+
+    if (attempts >= 3) {
+        printf("\n\t\t✖ Too many failed attempts. Please try again later.\n");
+        sleep(2);
+        exit(1);
+    }
+
+    printf("\n\t\t✖ Failed attempt %d of 3\n", attempts);
+    sleep(1);
 }
 
-void checkNotifications(struct User u) {
-    int notification_fd = open(FIFO_PATH, O_RDONLY | O_NONBLOCK);
-    if (notification_fd >= 0) {
-        char buffer[256];
-        ssize_t bytes_read = read(notification_fd, buffer, sizeof(buffer) - 1);
-        if (bytes_read > 0) {
-            buffer[bytes_read] = '\0';
-            printf("\n🔔 New Notification:\n%s\n", buffer);
-        }
-        close(notification_fd);
+/**
+ * @brief Handle failed registration attempts
+ * 
+ * This function handles failed registration attempts and implements
+ * security measures.
+ * 
+ * @param u Pointer to the user structure
+ */
+void handleFailedRegistration(struct User *u)
+{
+    static int attempts = 0;
+    attempts++;
+
+    if (attempts >= 3) {
+        printf("\n\t\t✖ Too many failed registration attempts. Please try again later.\n");
+        sleep(2);
+        exit(1);
     }
+
+    printf("\n\t\t✖ Failed registration attempt %d of 3\n", attempts);
+    sleep(1);
 }
