@@ -1,0 +1,110 @@
+\chapter{ATM Management System}
+\hypertarget{md_README}{}\label{md_README}\index{ATM Management System@{ATM Management System}}
+\label{md_README_autotoc_md0}%
+\Hypertarget{md_README_autotoc_md0}%
+
+
+A robust and secure ATM management system implemented in C, featuring comprehensive account management, transaction handling, and user authentication.\hypertarget{md_README_autotoc_md1}{}\doxysection{\texorpdfstring{Features}{Features}}\label{md_README_autotoc_md1}
+
+\begin{DoxyItemize}
+\item User authentication (login/registration)
+\item Account management
+\begin{DoxyItemize}
+\item Create new accounts
+\item Update account information
+\item Check account details
+\item Remove accounts
+\item Transfer ownership
+\end{DoxyItemize}
+\item Transaction handling
+\begin{DoxyItemize}
+\item Deposits
+\item Withdrawals
+\end{DoxyItemize}
+\item Multiple account types
+\begin{DoxyItemize}
+\item Savings accounts
+\item Fixed-\/term accounts (1, 2, and 3 years)
+\end{DoxyItemize}
+\item Security features
+\begin{DoxyItemize}
+\item Password protection
+\item Failed login attempt handling
+\item Data validation
+\item File backup system
+\end{DoxyItemize}
+\end{DoxyItemize}\hypertarget{md_README_autotoc_md2}{}\doxysection{\texorpdfstring{Project Structure}{Project Structure}}\label{md_README_autotoc_md2}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{.}
+\DoxyCodeLine{├──\ src/}
+\DoxyCodeLine{│\ \ \ ├──\ header.h\ \ \ \ \ \ \#\ Header\ file\ with\ structure\ definitions\ and\ function\ declarations}
+\DoxyCodeLine{│\ \ \ ├──\ main.c\ \ \ \ \ \ \ \ \#\ Main\ program\ entry\ point\ and\ menu\ handling}
+\DoxyCodeLine{│\ \ \ └──\ system.c\ \ \ \ \ \ \#\ Core\ system\ implementation}
+\DoxyCodeLine{├──\ data/\ \ \ \ \ \ \ \ \ \ \ \ \ \#\ Data\ directory\ for\ storing\ user\ and\ account\ information}
+\DoxyCodeLine{│\ \ \ ├──\ users.txt\ \ \ \ \ \#\ User\ credentials}
+\DoxyCodeLine{│\ \ \ └──\ records.txt\ \ \ \#\ Account\ records}
+\DoxyCodeLine{├──\ docs/\ \ \ \ \ \ \ \ \ \ \ \ \ \#\ Generated\ documentation}
+\DoxyCodeLine{├──\ Doxyfile\ \ \ \ \ \ \ \ \ \ \#\ Doxygen\ configuration}
+\DoxyCodeLine{└──\ README.md\ \ \ \ \ \ \ \ \ \#\ This\ file}
+
+\end{DoxyCode}
+\hypertarget{md_README_autotoc_md3}{}\doxysection{\texorpdfstring{Building and Running}{Building and Running}}\label{md_README_autotoc_md3}
+\hypertarget{md_README_autotoc_md4}{}\doxysubsection{\texorpdfstring{Prerequisites}{Prerequisites}}\label{md_README_autotoc_md4}
+
+\begin{DoxyItemize}
+\item C compiler (gcc recommended)
+\item Make
+\item Doxygen (for documentation generation)
+\end{DoxyItemize}\hypertarget{md_README_autotoc_md5}{}\doxysubsection{\texorpdfstring{Building}{Building}}\label{md_README_autotoc_md5}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{make}
+
+\end{DoxyCode}
+\hypertarget{md_README_autotoc_md6}{}\doxysubsection{\texorpdfstring{Running}{Running}}\label{md_README_autotoc_md6}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{./atm}
+
+\end{DoxyCode}
+\hypertarget{md_README_autotoc_md7}{}\doxysubsection{\texorpdfstring{Generating Documentation}{Generating Documentation}}\label{md_README_autotoc_md7}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{doxygen\ Doxyfile}
+
+\end{DoxyCode}
+
+
+The generated documentation will be available in the {\ttfamily docs} directory.\hypertarget{md_README_autotoc_md8}{}\doxysection{\texorpdfstring{Security Features}{Security Features}}\label{md_README_autotoc_md8}
+
+\begin{DoxyItemize}
+\item Input validation for all user inputs
+\item Secure password handling
+\item File backup before modifications
+\item Protection against unauthorized access
+\item Prevention of invalid operations on fixed-\/term accounts
+\item Confirmation required for account deletion
+\end{DoxyItemize}\hypertarget{md_README_autotoc_md9}{}\doxysection{\texorpdfstring{Error Handling}{Error Handling}}\label{md_README_autotoc_md9}
+The system implements comprehensive error handling for\+:
+\begin{DoxyItemize}
+\item Invalid user inputs
+\item File operations
+\item Account operations
+\item Transaction operations
+\item Authentication failures
+\end{DoxyItemize}\hypertarget{md_README_autotoc_md10}{}\doxysection{\texorpdfstring{Contributing}{Contributing}}\label{md_README_autotoc_md10}
+
+\begin{DoxyEnumerate}
+\item Fork the repository
+\item Create your feature branch ({\ttfamily git checkout -\/b feature/amazing-\/feature})
+\item Commit your changes (`git commit -\/m \textquotesingle{}Add some amazing feature'{\ttfamily )}
+\item {\ttfamily Push to the branch (}git push origin feature/amazing-\/feature\`{})
+\item Open a Pull Request
+\end{DoxyEnumerate}\hypertarget{md_README_autotoc_md11}{}\doxysection{\texorpdfstring{License}{License}}\label{md_README_autotoc_md11}
+This project is licensed under the MIT License -\/ see the LICENSE file for details.\hypertarget{md_README_autotoc_md12}{}\doxysection{\texorpdfstring{Acknowledgments}{Acknowledgments}}\label{md_README_autotoc_md12}
+
+\begin{DoxyItemize}
+\item Thanks to all contributors who have helped improve this project
+\item Special thanks to the open-\/source community for their valuable resources and tools 
+\end{DoxyItemize}
