@@ -66,23 +66,29 @@ $(SRC_DIR)/%.o: $(SRC_DIR)/%.c $(HEADERS)
 	@echo "Compiling $< -> $@"
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-clean :
+clean:
 	@echo "Cleaning build artifacts..."
 	$(RM) $(TARGET) $(OBJECTS)
-	@echo "Cleaning local data files (from ./share/atm/data/)..."
-	$(RM) $(LOCAL_DATA_FILES_TO_CLEAN)
+	@echo "Cleaning local data files..."
+	$(RM) ./share/atm/data/users.txt
+	$(RM) ./share/atm/data/records.txt
+	-rmdir ./share/atm/data 2>/dev/null || true
+	-rmdir ./share/atm 2>/dev/null || true
 	@echo "Clean complete."
 
-uninstall :
+uninstall:
 	@echo "Uninstalling ATM Management System from prefix $(prefix)..."
 	$(RM) $(APP_BINDIR)/$(TARGET)
 	$(RM) $(APP_INCLUDEDIR)/header.h
+	$(RM) $(APP_DATADIR)/users.txt
+	$(RM) $(APP_DATADIR)/records.txt
 	@echo "Removing data directory $(APP_DATADIR)..."
 	$(RM) -r $(APP_DATADIR)
 	@echo "Attempting to remove empty application directories..."
-	@rmdir $(APP_INCLUDEDIR) 2>/dev/null || true
-	@rmdir $(DESTDIR)$(datadir)/atm 2>/dev/null || true
-	@echo "Uninstallation complete. Note: Parent directories like $(DESTDIR)$(datadir) or $(DESTDIR)$(includedir) are not removed if not empty or not exclusively for this app."
+	-rmdir $(APP_INCLUDEDIR) 2>/dev/null || true
+	-rmdir $(DESTDIR)$(datadir)/atm 2>/dev/null || true
+	-rmdir $(DESTDIR)$(datadir)/atm/data 2>/dev/null || true
+	@echo "Uninstallation complete."
 
 install: all
 	@echo "Installing ATM Management System..."
@@ -93,11 +99,9 @@ install: all
 	@cp $(TARGET) $(APP_BINDIR)/
 	@echo "Copying header $(SRC_DIR)/header.h to $(APP_INCLUDEDIR)/"
 	@cp $(SRC_DIR)/header.h $(APP_INCLUDEDIR)/
-	@echo "Copying data files from ./share/atm/data/ to $(APP_DATADIR)/"
-	@cp -rT ./share/atm/data/ $(APP_DATADIR)/
 	@echo "Installation complete."
 	@echo "  Executable installed to: $(bindir)/$(TARGET)"
 	@echo "  Header file installed to: $(includedir)/atm/header.h"
-	@echo "  Data files installed to:  $(datadir)/atm/data/"
+	@echo "  Data directory created at: $(datadir)/atm/data/"
 
 .PHONY: all clean install uninstall
