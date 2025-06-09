@@ -16,3 +16,8 @@ clean :
 	rm -f $(objects) atm
 	rm -f ./share/atm/data/users.txt
 	rm -f ./share/atm/data/records.txt
+
+uninstall :
+	rm -f $(objects) atm
+	rm -f ./share/atm/data/users.txt
+	rm -f ./share/atm/data/records.txt
