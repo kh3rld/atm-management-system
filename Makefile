@@ -13,4 +13,6 @@ files.o : src/header.h
 utils.o : src/header.h
 
 clean :
-	rm -f $(objects)
+	rm -f $(objects) atm
+	rm -f ./share/atm/data/users.txt
+	rm -f ./share/atm/data/records.txt
